@@ -15,17 +15,38 @@ import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, PLACEMENT, UPDAT
     特点：【此阶段不能暂停】主要是为了保证页面渲染的连续
 */
 
-let workInProgressRootFiber = null; // 当前正在创建、渲染的fiber树的根fiber。渲染时用，保存的根fiber，对应着真实DOM容器container，也就是'#root'对应的真实DOM
+let workInProgressRootFiber = null; // 当前正在创建、渲染的fiber树的根fiber —— 在渲染时用，保存的根fiber，对应着真实DOM容器container，也就是'#root'对应的真实DOM
+let currentRenderRootFiber = null; // 上次渲染的fiber树的根fiber —— 渲染过后，currentRenderRootFiber保存着当前fiber树的根fiber，将workInProgressRootFiber置空
 let nextUnitOfWork = null; // 当前、下一个工作单元
+
+let deletions = [];  //删除的节点都放在这里，而不放在Effect List内
 
 /**
  * scheduleRoot 作用：将虚拟 DOM Tree 的每一个节点创建出对应的 fiber 形成一个 fiber 树
  * @param rootFiber 根fiber
  */
 export function scheduleRoot(rootFiber) {
-  workInProgressRootFiber = rootFiber;
-  nextUnitOfWork = rootFiber;
+  /* 
+    双缓冲机制：减少新建对象所浪费的空间和时间
+      第1次渲染时，currentRenderRootFiber为空
+      第2次渲染，currentRenderRootFiber不为空，但是alternate属性为空
+      第3、4...次渲染，currentRenderRootFiber.alternate均有值
+  */
+  if (currentRenderRootFiber && currentRenderRootFiber.alternate) { // 第3、4...次渲染
+    workInProgressRootFiber = currentRenderRootFiber.alternate;
+    workInProgressRootFiber.props = rootFiber.props;
+    workInProgressRootFiber.alternate = currentRenderRootFiber;
+  } else if (currentRenderRootFiber) { // 第2次渲染
+    rootFiber.alternate = currentRenderRootFiber;
+    workInProgressRootFiber = rootFiber;
+  } else { // 第1次渲染
+    workInProgressRootFiber = rootFiber;
+  }
+
+  workInProgressRootFiber.firstEffect = workInProgressRootFiber.lastEffect = workInProgressRootFiber.nextEffect = null;
+  nextUnitOfWork = workInProgressRootFiber;
 }
+
 
 
 /**
@@ -118,37 +139,62 @@ function updateHost(fiber) {
 // ------------------------------------------------------------------------------------
 
 /**
- * reconcileChildren的作用
- * 1. 将fiber全部的子虚拟DOM（子虚拟DOM指第一层子虚拟DOM，并非所有子虚拟DOM）转化为fiber并连接起来 ！！DOM diff的核心就在此处
- * 2. 把新元素和老元素进行比较，构建出一条effect list
+ * reconcileChildren的作用   ！！DOM diff的核心就在此处
+ * 1. 将fiber全部的子虚拟DOM（子虚拟DOM指第一层子虚拟DOM，并非所有子虚拟DOM）转化为fiber并连接起来
+ * 2. 把新元素和老元素进行比较，构建出一条汇集了增、改fiber的链表“effect list”与被保存了老fiber树中被删除fiber的“deletions”
  * @param {*} fiber 
  * @param {*} sonVDOMArr fiber的后代虚拟DOM数组，但是在reconcileChildren中，仅将fiber的第一层后代虚拟DOM创建出对应的fiber并连接起来
  */
 function reconcileChildren(fiber, sonVDOMArr) {
   let sonVDOMArrIndex = 0; // 子虚拟DOM下标
   let preFiber; // 保存上一次传递进来的fiber（和形参fiber属于同一棵树）
+  let oldSonFiber = fiber.alternate && fiber.alternate.child; // oldSonFiber表示fiber在上次渲染的currentFiber Tree中对应的“子节点”（和当前渲染对应的Fiber Tree并非同一棵树）
 
   // 遍历sonVDOMArr第一层的虚拟DOM
-  while (sonVDOMArrIndex < sonVDOMArr.length) {
+  while (sonVDOMArrIndex < sonVDOMArr.length || oldSonFiber) {
     let sonVDOM = sonVDOMArr[sonVDOMArrIndex];
+    let newFiber; // 新的fiber
     let tag;
 
-    if (sonVDOM.type === ELEMENT_TEXT) {  // 我们在创建虚拟DOM时，文本节点的type会被指定为ELEMENT_TEXT
+    // 这里单独写上sonVDOM，是因为在删除一个节点时，sonVDOM为null，再取type就会报错
+    if (sonVDOM && sonVDOM.type === ELEMENT_TEXT) {  // 我们在创建虚拟DOM时，文本节点的type会被指定为ELEMENT_TEXT
       tag = TAG_TEXT;
-    } else if (typeof sonVDOM.type === 'string') {
+    } else if (sonVDOM && typeof sonVDOM.type === 'string') {
       tag = TAG_HOST; // 原生DOM节点sonVDOM.type: 'div'、'li'、'ul'
     }
 
-    let newFiber = {
-      tag, // ELEMENT_HOST
-      type: sonVDOM.type, // 'div'
-      props: sonVDOM.props,  // {id="A1" style={style}}
-      stateNode: null, // 此时div节点还没有创建真实DOM
-      return: fiber, // 每个fiber的return都指向它们的父fiber
-      // updateQueue: new UpdateQueue(),
-      effectTag: PLACEMENT, // 副作用标识，render阶段我们会收集增加PLACEMENT、删除DELETE、更新UPDATE的fiber，其实只有NOWORK的不作处理
+    const sameType = oldSonFiber && sonVDOM && oldSonFiber.type === sonVDOM.type; // 判断老fiber的标签和虚拟DOM的标签是否相同，相同则可以复用
 
-      nextEffect: null // effect list是一个单链表，该链表上保存着所有的 “发生了变化” 的fiber【连接方式对应深度优先遍历】
+    // 更新（复用）、创建fiber
+    if (sameType) { // 虚拟DOM和上次渲染时对应的fiber类型相同时，大部分属性都可以沿用之前的，只需更新props属性和effectTag
+      newFiber = {
+        tag: oldSonFiber.tag,
+        type: oldSonFiber.type,
+        props: sonVDOM.props, // 这里必须使用新的虚拟DOM的props
+        stateNode: oldSonFiber.stateNode,
+        return: fiber,
+        effectTag: UPDATE,
+        alternate: oldSonFiber, // 让新fiber的alternate属性指向老的fiber
+        nextEffect: null
+      }
+    } else {  // 类型不相同时，需要重新创建fiber
+      if (sonVDOM) {  // 避免sonVDOM的值为null
+        newFiber = {
+          tag, // ELEMENT_HOST
+          type: sonVDOM.type, // 'div'
+          props: sonVDOM.props,  // {id="A1" style={style}}
+          stateNode: null, // 此时div节点还没有创建真实DOM
+          return: fiber, // 每个fiber的return都指向它们的父fiber
+          // updateQueue: new UpdateQueue(),
+          effectTag: PLACEMENT, // 副作用标识，render阶段我们会收集增加PLACEMENT、删除DELETE、更新UPDATE的fiber，其实只有NOWORK的不作处理
+
+          nextEffect: null // effect list是一个单链表，该链表上保存着所有的 “发生了变化” 的fiber【连接方式对应深度优先遍历】
+        }
+      }
+      if (oldSonFiber) {
+        oldSonFiber.effectTag = DELETION; // 将老的fiber树中的对应节点标记为删除
+        deletions.push(oldSonFiber);
+      }
     }
 
     // 创建一条由child、sibling构建的链表
@@ -161,6 +207,19 @@ function reconcileChildren(fiber, sonVDOMArr) {
       preFiber = newFiber;
     }
 
+    /* 
+      现在的移动方式其实并不完善
+      例如：
+        1. 当老fiber tree中有一个节点在虚拟DOM中不存在，该节点被标记为删除，那么就可能出现下一个fiber与当前虚拟DOM刚好对应上，此时就只需要让fiber向后移动，而虚拟DOM不需要移动，在标记删除的情况下，移动也本应如此
+        2. 新增同理，fiber tree中没有，而虚拟DOM中有，此时就只需让虚拟DOM的下标+1，而不需要让fiber链表后移
+        ...
+        当前仅仅是可共用（例如只改了标签属性，或者标签中的文本）时，指针以及下标的移动方式
+    */
+    // 移动链表
+    if (oldSonFiber) {
+      oldSonFiber = oldSonFiber.sibling;
+    }
+    // 移动虚拟DOM下标
     sonVDOMArrIndex++;
   }
 }
@@ -181,16 +240,27 @@ function createDOM(fiber) {
 }
 
 /**
- * 遍历保存属性的newProps，通过setProps方法将遍历出来的属性添加到对应的DOM上
+ * 遍历保存属性的oldProps、newProps，将遍历出来的属性更新（增、删、改）到对应的DOM上
  * @param {*} DOM 
  * @param {*} oldProps 
  * @param {*} newProps 
  * @returns 
  */
 function updateDOM(DOM, oldProps, newProps) {
+  for (let key in oldProps) {
+    if (key !== 'children') {
+      if (newProps.hasOwnProperty(key)) { // 1. 原来有，现在也有 - 更新
+        setProps(DOM, key, newProps[key]);
+      } else {
+        DOM.removeAttribute(key); // 2. 原来有，现在没 - 删除
+      }
+    }
+  }
   for (let key in newProps) {
     if (key !== 'children') {
-      setProps(DOM, key, newProps[key]);
+      if (!oldProps.hasOwnProperty(key)) { // 3. 原来没，现在有 - 增加
+        setProps(DOM, key, newProps[key]);
+      }
     }
   }
 }
@@ -255,35 +325,51 @@ function completeUnitOfWork(fiber) {
  * 从根节点的 firstEffect 开始遍历 Effect 链表
  */
 function commitRoot() {
+  deletions.forEach(commitWork); // 执行Effect List之前先把，先把该删除的元素删除掉
 
   let fiber = workInProgressRootFiber.firstEffect; // 取出根节点的 firstEffect 指向的节点
   while (fiber) {
-    console.log('fiber: ', fiber);
-    commitWork(fiber);
+    commitWork(fiber); // 根据副作用操作DOM
     fiber = fiber.nextEffect;
   }
-
+  deletions.length = 0;
+  currentRenderRootFiber = workInProgressRootFiber;
   workInProgressRootFiber = null;
 }
 
-// 将所有产生副作用的fiber进行对应的操作：新增的节点创建DOM并挂载到父DOM上、需要删除的节点直接从父元素上清除对应的子元素、更新对应DOM，最终需要将当前节点的effectTag置为空
+
 /**
- * 将 fiber 对应的真实 DOM 映射到 DOM 树上（增、删、改）
+ * commitWork作用：将所有产生副作用的fiber进行对应的操作：
+ *   · 新增的节点创建DOM并挂载到父DOM上
+ *   · 需要删除的节点直接从父元素上清除对应的子元素
+ *   · 更新对应DOM
+ * 最终需要将当前节点的effectTag置为空
  * @param {*} fiber 
  * @returns 
  */
 function commitWork(fiber) {
   if (!fiber) return;
   let returnFiber = fiber.return;
-
   let returnDOM = returnFiber.stateNode;
 
   if (fiber.effectTag === PLACEMENT) { // 增加元素
     returnDOM.appendChild(fiber.stateNode); // returnDOM.appendChild(nextFiber.stateNode);
-  } 
+  } else if (fiber.effectTag === DELETION) {  // 删除元素（只考虑DOM节点，暂不考虑函数式组件与类式组件）
+    returnDOM.removeChild(fiber.stateNode);
+    // return commitDeletion(fiber, returnDOM);
+  } else if (fiber.effectTag === UPDATE) {  // 更新元素（只考虑HTML元素）
+    if (fiber.type === ELEMENT_TEXT) {
+      if (fiber.alternate.props.text !== fiber.props.text) {
+        fiber.stateNode.textContent = fiber.props.text;
+      }
+    } else {
+      updateDOM(fiber.stateNode, fiber.alternate.props, fiber.props);
+    }
+  }
 
   fiber.effectTag = null;
 }
+
 
 /**
  * 在浏览器完成自己的重要任务后，如果该时间片还有剩余时间，请求浏览器赶紧来执行workLoop的任务
