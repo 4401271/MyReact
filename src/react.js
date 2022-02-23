@@ -1,10 +1,15 @@
+import { Update } from './updateQueue';
+import { scheduleRoot } from './scheduler';
 import { ELEMENT_TEXT } from './constants'
 
 
 // 创建虚拟DOM
 function createElement(type, config, ...children) {
-  delete config._self;
-  delete config._source;
+  // 标签没有属性时，config为null
+  if (config) {
+    delete config._self;
+    delete config._source;
+  }
   return {
     type,
     props: {
@@ -21,8 +26,22 @@ function createElement(type, config, ...children) {
   }
 }
 
+class Component {
+  constructor(props) {
+    this.props = props;
+  }
+  setState(payload) { // payload可能是对象，也可能是函数
+    let update = new Update(payload);  // 将payload挂载到update对象上
+    this.internalFiber.updateQueue.addUpdate(update); // updateQueue放在类组件的fiber节点internalFiber上
+    scheduleRoot();
+  }
+}
+// 用该属性标明这是一个类组件（用于区分函数式组件）
+Component.prototype.isReactComponent = {}; 
+
 const React = {
-  createElement
+  createElement,
+  Component
 }
 
 export default React;

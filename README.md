@@ -1,70 +1,49 @@
-# Getting Started with Create React App
+### 阉割版 React - 使用文档
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**Note: `index.js` 需要搭配 `index.html` 使用，因为存在多个版本，所以需要保证两个文件名相同！**
 
-## Available Scripts
 
-In the project directory, you can run:
+配置缘故，在 index.js 中书写 `JSX`，默认使用原生 React 的 `createElement`，尽管引入的是自己的 React，也并不会使用我们自己写的 `createElement`
 
-### `npm start`
+因此我们需要先去 [Babel](https://www.babeljs.cn/repl#?browsers=defaults%2C%20not%20ie%2011%2C%20not%20ie_mob%2011&build=&builtIns=false&corejs=3.6&spec=false&loose=false&code_lz=Q&debug=false&forceAllTransforms=false&shippedProposals=false&circleciRepo=&evaluate=false&fileSize=false&timeTravel=false&sourceType=module&lineWrap=true&presets=env%2Creact%2Cstage-2&prettier=false&targets=&version=7.17.6&externalPlugins=&assumptions=%7B%7D) 将JSX 编译为 JS ，这里面显式地调用了 `createElement` ，一起看个一段写在 index.js 中的代码：
+```html
+render() {
+	return (
+		<div id='counter'>
+			<h1>{this.props.name}</h1>
+			<div style={{width: '25px', display: 'inline-block'}}>{this.state.number}</div>
+			<button onClick={this.onClick}>戳一下 +1</button>
+		</div>
+	)
+}
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+`JSX` 部分经过 Babel 编译过后，就变成了：
+```javascript
+"use strict";
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+/*#__PURE__*/
+React.createElement("div", {
+  id: "counter"
+}, /*#__PURE__*/React.createElement("h1", null, (void 0).props.name), /*#__PURE__*/React.createElement("div", {
+  style: {
+    width: '25px',
+    display: 'inline-block'
+  }
+}, (void 0).state.number), /*#__PURE__*/React.createElement("button", {
+  onClick: (void 0).onClick
+}, "\u6233\u4E00\u4E0B +1"));
+```
 
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+改写一下，就变成了我们需要的 JS 代码：
+```javascript
+render() {
+    return (
+        React.createElement("div", {id: "counter"},
+            React.createElement("h1", null, this.props.name),
+            React.createElement("div", {style: {width: '25px', display: 'inline-block'}}, this.state.number),
+            React.createElement("button", {onClick: this.onClick}, "戳一下 +1")
+        )
+    );
+  }
+```
