@@ -28,12 +28,12 @@ export class UpdateQueue {
     while (currentUpdate) {
       let nextState = typeof currentUpdate.payload === 'function' ?
         currentUpdate.payload(state) :
-        currentUpdate.payload
+        currentUpdate.payload;
       state = { ...state, ...nextState }; // 暂定state就是一个对象
       currentUpdate = currentUpdate.nextUpdate;
     }
 
-    this.firstUpdate = this.lastUpdate = null;
+    this.firstUpdate = this.lastUpdate = null; // 只在类式组件中有实际作用
     return state;
   }
 }

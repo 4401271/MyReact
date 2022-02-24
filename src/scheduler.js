@@ -1,4 +1,4 @@
-import { UpdateQueue } from './updateQueue';
+import { Update, UpdateQueue } from './updateQueue';
 import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, TAG_FUNCTION, PLACEMENT, UPDATE, DELETION } from './constants';
 
 /* 
@@ -21,6 +21,10 @@ let currentRenderRootFiber = null; // 上次渲染的fiber树的根fiber —— 
 let nextUnitOfWork = null; // 当前、下一个工作单元
 
 let deletions = [];  // 上一棵fiber树需要删除的节点都放在这里。Effect List中标记的被删除的fiber，是当前正在渲染的fiber树中需要删除的fiber（其实操作的就是上上棵fiber树）
+
+// hooks所需的两个变量
+let funComponentFiber = null; // 函数式组件对应的fiber
+let hookIndex = 0; // hooks索引，一个函数式组件中，可能包含多个hooks，hookIndex与hooks相对应，所以hooks不能是动态创建
 
 /**
  * scheduleRoot 作用：更新两颗fiber树根节点以及根节点alternate指向
@@ -175,7 +179,11 @@ function updateClassComponent(fiber) {
   reconcileChildren(fiber, vDOMArrOfChildrenOfFiber);
 }
 function updateFunctionComponent(fiber) {
-  const vDOMArrOfChildrenOfFiber = [new fiber.type(fiber.props)];
+  funComponentFiber = fiber;
+  hookIndex = 0;
+  funComponentFiber.hooks = [];
+
+  const vDOMArrOfChildrenOfFiber = [fiber.type(fiber.props)];
   reconcileChildren(fiber, vDOMArrOfChildrenOfFiber);
 }
 // ----------------------------------------------------------------------------------------------↑
@@ -323,7 +331,7 @@ function createDOM(fiber) {
  * @returns 
  */
 function updateDOM(DOM, oldProps, newProps) {
-  if (DOM.setAttribute){
+  if (DOM && DOM.setAttribute){
     for (let key in oldProps) {
       if (key !== 'children') {
         if (newProps.hasOwnProperty(key)) { // 1. 原来有，现在也有 - 更新
@@ -471,4 +479,47 @@ function commitDeletion(fiber, domReturn) {
   } else {
     commitDeletion(fiber.child, domReturn);
   }
+}
+
+/**
+ * 每个函数式组件对应的fiber，都有自己的hook → 每个hook都有自己的state和updateQueue
+ * @param {*} reducer 
+ * @param {*} initialValue 
+ * @returns 
+ */
+export function useReducer(reducer, initialValue) {
+  let hooks = funComponentFiber.alternate && 
+    funComponentFiber.alternate.hooks && 
+    funComponentFiber.alternate.hooks[hookIndex];
+
+  if (hooks) { // 第2、3...次渲染
+    hooks.state = hooks.updateQueue.forceUpdate(hooks.state); 
+  } else { // 第一次渲染
+    hooks = {
+      state: initialValue,
+      updateQueue: new UpdateQueue()
+    }
+  }
+  const dispatch = action => { // action: {type: ADD}
+    // reducer:
+    // function reducer(state, action) {
+    //   switch (action.type) {
+    //     case ADD:
+    //       return {count: state.count+1};
+    //     default:
+    //       return state;
+    //   }
+    // }
+    let payload = reducer ? reducer(hooks.state, action) : action;
+    hooks.updateQueue.addUpdate(
+      new Update(payload)
+    );
+    scheduleRoot();
+  }
+  funComponentFiber.hooks[hookIndex++] = hooks;
+  return [hooks.state, dispatch];
+}
+
+export function useState(initialValue) {
+  return useReducer(null, initialValue); 
 }

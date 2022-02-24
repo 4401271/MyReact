@@ -38,12 +38,12 @@ React.createElement("div", {
 改写一下，就变成了我们需要的 JS 代码：
 ```javascript
 render() {
-    return (
-        React.createElement("div", {id: "counter"},
-            React.createElement("h1", null, this.props.name),
-            React.createElement("div", {style: {width: '25px', display: 'inline-block'}}, this.state.number),
-            React.createElement("button", {onClick: this.onClick}, "戳一下 +1")
-        )
+  return (
+    React.createElement("div", {id: "counter"},
+      React.createElement("h1", null, this.props.name),
+        React.createElement("div", {style: {width: '25px', display: 'inline-block'}}, this.state.number),
+        React.createElement("button", {onClick: this.onClick}, "戳一下 +1")
+      )
     );
   }
 ```
