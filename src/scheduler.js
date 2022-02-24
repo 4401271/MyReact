@@ -1,5 +1,5 @@
 import { UpdateQueue } from './updateQueue';
-import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, PLACEMENT, UPDATE, DELETION } from './constants';
+import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, TAG_FUNCTION, PLACEMENT, UPDATE, DELETION } from './constants';
 
 /* 
   从根节点开始渲染和调度，包含了三个阶段：
@@ -120,14 +120,16 @@ function performUnitOfWork(fiber) {
  */
 function beginWork(fiber) {
 
-  if (fiber.tag === TAG_ROOT) {        // 根Fiber
+  if (fiber.tag === TAG_ROOT) {           // 根Fiber
     updateHostRoot(fiber);
-  } else if (fiber.tag === TAG_TEXT) { // 文本节点
+  } else if (fiber.tag === TAG_TEXT) {    // 文本节点
     updateHostText(fiber);
-  } else if (fiber.tag === TAG_HOST) { // 普通节点
+  } else if (fiber.tag === TAG_HOST) {    // 普通节点
     updateHost(fiber);
-  } else if (fiber.tag === TAG_CLASS) {// 类式组件
+  } else if (fiber.tag === TAG_CLASS) {   // 类式组件
     updateClassComponent(fiber);
+  } else if (fiber.tag === TAG_FUNCTION) {// 函数式组件
+    updateFunctionComponent(fiber);
   }
 
 }
@@ -172,6 +174,10 @@ function updateClassComponent(fiber) {
   const vDOMArrOfChildrenOfFiber = [newElement];
   reconcileChildren(fiber, vDOMArrOfChildrenOfFiber);
 }
+function updateFunctionComponent(fiber) {
+  const vDOMArrOfChildrenOfFiber = [new fiber.type(fiber.props)];
+  reconcileChildren(fiber, vDOMArrOfChildrenOfFiber);
+}
 // ----------------------------------------------------------------------------------------------↑
 
 /**
@@ -200,6 +206,8 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
       tag = TAG_HOST; // 原生DOM节点sonVDOM.type: 'div'、'li'、'ul'
     } else if (sonVDOM && typeof sonVDOM.type === 'function' && sonVDOM.type.prototype.isReactComponent) {
       tag = TAG_CLASS;
+    }else if (sonVDOM && typeof sonVDOM.type === 'function') {
+      tag = TAG_FUNCTION;
     }
 
     const sameType = oldSonFiber && sonVDOM && oldSonFiber.type === sonVDOM.type; // 判断老fiber的标签和虚拟DOM的标签是否相同，相同则可以复用
