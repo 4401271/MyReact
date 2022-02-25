@@ -19,45 +19,12 @@ let style = {border: '2px solid skyblue', margin: '5px', borderRadius: '7px'}
 // React.createElement(type, props, ...children)
 
 // JS
-let element = React.createElement(
-  "div", 
-  {
-    id: "A1",
-    style: style
-  }, 
-  "A1", 
-  React.createElement(
-    "div", 
-    {
-      id: "B1",
-      style: style
-    }, 
-    "B1", 
-    React.createElement(
-      "div", 
-      {
-        id: "C1",
-        style: style
-      }, 
-      "C1"
-    ), 
-    React.createElement(
-      "div", 
-      {
-        id: "C2",
-        style: style
-      }, 
-      "C2"
-    )
+let element = React.createElement("div", {id: "A1",style: style}, "A1", 
+  React.createElement("div", {id: "B1",style: style}, "B1", 
+    React.createElement("div", {id: "C1",style: style}, "C1"), 
+    React.createElement("div", {id: "C2",style: style}, "C2")
   ), 
-  React.createElement(
-    "div", 
-    {
-      id: "B2",
-        style: style
-    }, 
-    "B2"
-  )
+  React.createElement("div", {id: "B2",style: style}, "B2")
 );
 
 // 由createElemen创建出来的 “虚拟DOM”：
