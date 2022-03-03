@@ -426,7 +426,6 @@ function reducer(state, action) {
 function FunctionCounter(props){
   const [countState, dispatch] = React.useReducer(reducer, {count: 0});
   return (
-<<<<<<< HEAD
     <div>
 	  <div>{countState.number}</div>
       <button onClick={dispatch({ type: ADD })}>戳一下 +1</button>
@@ -690,13 +689,3 @@ fiber.return 为 undefined，退出 `performUnitOfWork` 的 while 循环，`perf
 
 完成！
 
-=======
-    React.createElement("div", {id: "counter"},
-      React.createElement("h1", null, this.props.name),
-        React.createElement("div", {style: {width: '25px', display: 'inline-block'}}, this.state.number),
-        React.createElement("button", {onClick: this.onClick}, "戳一下 +1")
-      )
-    );
-  }
-```
->>>>>>> 3df4a2428eac65fca832ade0b51f0b3aa31fce71
