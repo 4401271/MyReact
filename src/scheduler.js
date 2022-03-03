@@ -2,15 +2,11 @@ import { Update, UpdateQueue } from './updateQueue';
 import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, TAG_FUNCTION, PLACEMENT, UPDATE, DELETION } from './constants';
 
 /* 
-  从根节点开始渲染和调度，包含了三个阶段：
-    diff 阶段：对比新旧虚拟DOM进行增量更新或创建
-      特点：比较花费时间，需要我们对任务进行拆分。拆分维度：虚拟DOM节点，一个DOM节点对应一个任务【此阶段可以暂停】
+  从根节点开始渲染和调度，包含了两个阶段：
+    rereconcileChildren 阶段：也就是diff节点，对比新旧虚拟DOM进行增量更新或创建
+      特点：比较花费时间，需要我们对任务进行拆分。
+      拆分维度：虚拟DOM节点，一个DOM节点对应一个任务【此阶段可以暂停】
       （开始渲染时，浏览器先去分配时间片，在一个时间片中，执行我们的任务，执行完一个任务，看是否还有时间，有时间就去执行下一个任务，没有时间就将执行权再交给浏览器）
-
-    render 阶段：获得一个effect list，保存着：更新、删除、增加的节点
-      任务：
-        1. 根据虚拟DOM生成fiber树
-        2. 收集effect list
 
     commit 阶段：进行DOM创建、更新
       特点：【此阶段不能暂停】主要是为了保证页面渲染的连续
@@ -23,7 +19,7 @@ let nextUnitOfWork = null; // 当前、下一个工作单元
 let deletions = [];  // 上一棵fiber树需要删除的节点都放在这里。Effect List中标记的被删除的fiber，是当前正在渲染的fiber树中需要删除的fiber（其实操作的就是上上棵fiber树）
 
 // hooks所需的两个变量
-let funComponentFiber = null; // 函数式组件对应的fiber
+let funComponentFiber = null; // 函数式组件对应的fiber（并非根fiber）
 let hookIndex = 0; // hooks索引，一个函数式组件中，可能包含多个hooks，hookIndex与hooks相对应，所以hooks不能是动态创建
 
 /**
@@ -103,7 +99,7 @@ function workLoop(deadline) {
  * @returns
  */
 function performUnitOfWork(fiber) {
-  beginWork(fiber); // 每执行一次，就会将一个fiber节点下的一层的虚拟DOM转化为fiber并借助child、sibling将所有的fiber连接起来
+  beginWork(fiber); // beginWork每执行一次，就会将一个fiber的子虚拟DOM全部转化为fiber并借助child、sibling将所有的fiber连接起来
   if (fiber.child) {
     return fiber.child;
   }
@@ -223,33 +219,18 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
     // 更新（复用）、创建fiber
     if (sameType) { // 虚拟DOM和上次渲染时对应的fiber类型相同时，大部分属性都可以沿用之前的，只需更新props属性和effectTag
       /** 
-       * “双缓冲机制”：已经两次更新时，直接复用“上上次的fiber”
+       * “双缓冲机制”：一个节点已经两次更新时，直接复用“上上次的fiber”
        * 
-       * 问题1：为什么用上上次的fiber，而不是用上次的fiber？
-       *   假如我们没有复用fiber，而是新建一个fiber对象
-       *   在建立之前，会先拿虚拟DOM和上次的fiber做比较，看是更新还是删除还是新建等
-       *   这样来实现最小化更新
-       * 
-       *   当然，复用了fiber，最小化更新的目标依旧需要实现，所以对照的依旧是上次的fiber，来实现减少对DOM的操作
-       *   因此，我们不能拿上次的fiber进行操作
-       * 
-       *   我们拿当前的虚拟DOM和上次的fiber做对比，sameType为true
-       *   以前的做法是新建一个fiber对象，现在就只需要将上上次的fiber拿过来，对fiber的部分数据进行一个更新即可
-       * 
-       * 问题2：上上次的fiber一定和当前的虚拟DOM对应吗？
-       *   当然的，我们在比较时，如果想要使用上上次的fiber，sameType就必须为true
-       *   为true就可以告诉我们上次的fiber和当前的虚拟DOM是相对应的
-       *   alternate属性也sameType为true才能绑定上去的
-       *   所以，上上次的fiber（fiber.alternate.child.alternate）也就和当前的虚拟DOM（newChildren[arrIndex]）对应起来了
+       * 问题：为什么用上上次的fiber，而不是用上次的fiber？
        */
-      if (oldSonFiber.alternate) {  // 复用“上上次的fiber”
+      if (oldSonFiber.alternate) {  // --节点第3、4...次渲染，复用“上上次的fiber”
         newFiber = oldSonFiber.alternate;
         newFiber.props = sonVDOM.props;
         newFiber.alternate = oldSonFiber;
         newFiber.effectTag = UPDATE; // 上上次，effectTag保存的就不一定是UPDATE，有可能是PLACEMENT
         newFiber.updateQueue = oldSonFiber.updateQueue || new UpdateQueue();
         newFiber.nextEffect = null;
-      } else { // 初次更新或已经更新了一次
+      } else { // --第2次渲染
         newFiber = {
           tag: oldSonFiber.tag,
           type: oldSonFiber.type,
@@ -262,10 +243,10 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
           nextEffect: null
         }
       }
-    } else {  // 类型不相同时，需要重新创建fiber
-      if (sonVDOM) {  // 标签的位置可能被写了一个{null}
+    } else {  // oldSonFiber 不存在、sonVDOM 为 null、类型不同
+      if (sonVDOM) {  // 排除标签的位置写了一个{null}的情况
         newFiber = {
-          tag, // ELEMENT_HOST
+          tag, // TAG_TEXT
           type: sonVDOM.type, // 'div'
           props: sonVDOM.props,  // {id="A1" style={style}}
           stateNode: null, // 此时div节点还没有创建真实DOM
@@ -276,7 +257,7 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
           nextEffect: null // effect list是一个单链表，该链表上保存着所有的 “发生了变化” 的fiber【连接方式对应深度优先遍历】
         }
       }
-      if (oldSonFiber) {
+      if (oldSonFiber) { // sonVDOM 为 null、类型不同
         oldSonFiber.effectTag = DELETION; // 将老的fiber树中的对应节点标记为删除
         deletions.push(oldSonFiber);
       }
@@ -284,7 +265,7 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
 
     // 借助child、sibling将全部的fiber组成一个链表
     if (newFiber) {
-      if (arrIndex == 0) {
+      if (arrIndex === 0) {
         fiber.child = newFiber; // 索引为0时，表示newFiber是父fiber的第一个子fiber，此时让父fiber的child属性指向该newFiber
       } else {
         preFiber.sibling = newFiber; // 索引不为0时，就表示该newFiber是父fiber的第2、3...个子fiber，需要借助sibling让该fiber挂到上一个子fiber的后面
@@ -358,7 +339,7 @@ function updateDOM(DOM, oldProps, newProps) {
  * @param {*} value 
  */
 function setProps(DOM, key, value) {
-  if (/^on/.test(key)) { // 点击事件
+  if (/^on/.test(key)) { // 事件
     DOM[key.toLowerCase()] = value;
   } else if (key === 'style') { // 样式
     if (value) {
@@ -377,32 +358,37 @@ function setProps(DOM, key, value) {
  */
 function completeUnitOfWork(fiber) {
   let returnFiber = fiber.return;
+  // ①
   if (returnFiber) {
+    // ②
     if (!returnFiber.firstEffect) {
       // 把当前节点的“first子节点”挂到父节点的first指针上
       returnFiber.firstEffect = fiber.firstEffect;
     }
-    // 
+    // ③
     if (fiber.lastEffect) {
+      // ④
       if (returnFiber.lastEffect) {
-        // 
         returnFiber.lastEffect.nextEffect = fiber.firstEffect;
       }
-      // 把当前节点的“last子节点”挂到父节点的last指针上(→6)
+      // ⑤ 把当前节点的“last子节点”挂到父节点的last指针上
       returnFiber.lastEffect = fiber.lastEffect;
       
     }
 
     // 把自己挂到父fiber上
     const effectTag = fiber.effectTag;
+    // ⑥
     if (effectTag) {
+      // ⑦
       if (returnFiber.lastEffect) {
         // 更改当前节点last子节点的nextEffect指针指向当前节点
         returnFiber.lastEffect.nextEffect = fiber;
+      // ⑧
       } else {
         returnFiber.firstEffect = fiber;
       }
-      // 同时更改父节点的last指针也指向当前节点
+      // ⑨ 同时更改父节点的last指针也指向当前节点
       returnFiber.lastEffect = fiber;
     }
   }
@@ -474,7 +460,7 @@ function commitWork(fiber) {
  * @param {*} domReturn 
  */
 function commitDeletion(fiber, domReturn) {
-  if (fiber.tag == TAG_HOST || fiber.tag == TAG_TEXT) {
+  if (fiber.tag === TAG_HOST || fiber.tag === TAG_TEXT) {
     domReturn.removeChild(fiber.stateNode);
   } else {
     commitDeletion(fiber.child, domReturn);
@@ -488,18 +474,19 @@ function commitDeletion(fiber, domReturn) {
  * @returns 
  */
 export function useReducer(reducer, initialValue) {
-  let hooks = funComponentFiber.alternate && 
+  let hook = funComponentFiber.alternate && // 第一次渲染时 hook 值为 undefined
     funComponentFiber.alternate.hooks && 
     funComponentFiber.alternate.hooks[hookIndex];
 
-  if (hooks) { // 第2、3...次渲染
-    hooks.state = hooks.updateQueue.forceUpdate(hooks.state); 
-  } else { // 第一次渲染
-    hooks = {
+  if (hook) { // 第2、3...次渲染
+    hook.state = hook.updateQueue.forceUpdate(hook.state); 
+  } else { // 第1次渲染
+    hook = {
       state: initialValue,
       updateQueue: new UpdateQueue()
     }
   }
+  funComponentFiber.hooks[hookIndex++] = hook;
   const dispatch = action => { // action: {type: ADD}
     // reducer:
     // function reducer(state, action) {
@@ -510,14 +497,13 @@ export function useReducer(reducer, initialValue) {
     //       return state;
     //   }
     // }
-    let payload = reducer ? reducer(hooks.state, action) : action;
-    hooks.updateQueue.addUpdate(
+    let payload = reducer ? reducer(hook.state, action) : action; // 传入reducer时，就根据reducer和对应的action计算出对应的state
+    hook.updateQueue.addUpdate(
       new Update(payload)
     );
     scheduleRoot();
   }
-  funComponentFiber.hooks[hookIndex++] = hooks;
-  return [hooks.state, dispatch];
+  return [hook.state, dispatch];
 }
 
 export function useState(initialValue) {

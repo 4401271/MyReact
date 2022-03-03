@@ -26,6 +26,7 @@ export class UpdateQueue {
     let currentUpdate = this.firstUpdate;
 
     while (currentUpdate) {
+      // payload在调用useReducer时是一个对象，调用useState时是一个函数
       let nextState = typeof currentUpdate.payload === 'function' ?
         currentUpdate.payload(state) :
         currentUpdate.payload;
@@ -33,7 +34,7 @@ export class UpdateQueue {
       currentUpdate = currentUpdate.nextUpdate;
     }
 
-    this.firstUpdate = this.lastUpdate = null; // 只在类式组件中有实际作用
+    this.firstUpdate = this.lastUpdate = null;
     return state;
   }
 }

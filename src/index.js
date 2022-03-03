@@ -13,11 +13,18 @@ function reducer(state, action) {
   }
 }
 
-//<div id='counter'>
-//  <h1>{this.props.name}</h1>
-//  <div style={{width: '25px', display: 'inline-block'}}>{this.state.number}</div>
-//  <button onClick={this.onClick}>戳一下 +1</button>
-//</div>
+{/* <div>
+  <div id='counter1'>
+    <h1>{props.name+"1"}</h1>
+    <div style={{width: '25px', display: 'inline-block'}}>{numberState.number}</div>
+    <button onClick={setNumberState({ number: numberState.number + 1 })}>戳一下 +1</button>
+  </div>
+  <div id='counter2'>
+    <h1>{props.name+"2"}</h1>
+    <div style={{width: '25px', display: 'inline-block'}}>{countState.count}</div>
+    <button onClick={dispatch({ type: ADD })}>戳一下 +1</button>
+  </div>
+</div> */}
 
 function FunctionCounter(props){
   const [numberState, setNumberState] = React.useState({number: 0});
