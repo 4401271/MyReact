@@ -688,4 +688,3 @@ fiber.return 为 undefined，退出 `performUnitOfWork` 的 while 循环，`perf
 从根节点 firstEffect 指向的节点开始，根据 fiber.type 即 DOM 操作方式，更新 DOM 树。
 
 完成！
-
