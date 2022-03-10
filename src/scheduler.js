@@ -3,7 +3,7 @@ import { ELEMENT_TEXT, TAG_ROOT, TAG_HOST, TAG_TEXT, TAG_CLASS, TAG_FUNCTION, PL
 
 /* 
   从根节点开始渲染和调度，包含了两个阶段：
-    rereconcileChildren 阶段：也就是diff节点，对比新旧虚拟DOM进行增量更新或创建
+    reconcileChildren 阶段：也就是diff节点，将虚拟DOM与fiber做对比，更新fiber树
       特点：比较花费时间，需要我们对任务进行拆分。
       拆分维度：虚拟DOM节点，一个DOM节点对应一个任务【此阶段可以暂停】
       （开始渲染时，浏览器先去分配时间片，在一个时间片中，执行我们的任务，执行完一个任务，看是否还有时间，有时间就去执行下一个任务，没有时间就将执行权再交给浏览器）
@@ -243,8 +243,8 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
           nextEffect: null
         }
       }
-    } else {  // oldSonFiber 不存在、sonVDOM 为 null、类型不同
-      if (sonVDOM) {  // 排除标签的位置写了一个{null}的情况
+    } else {  // sameType为false：oldSonFiber不存在、sonVDOM为null、类型不同
+      if (sonVDOM) {  // oldSonFiber不存在、类型不同
         newFiber = {
           tag, // TAG_TEXT
           type: sonVDOM.type, // 'div'
@@ -257,7 +257,7 @@ function reconcileChildren(fiber, vDOMArrOfChildrenOfFiber) {
           nextEffect: null // effect list是一个单链表，该链表上保存着所有的 “发生了变化” 的fiber【连接方式对应深度优先遍历】
         }
       }
-      if (oldSonFiber) { // sonVDOM 为 null、类型不同
+      if (oldSonFiber) { // sonVDOM 为 null
         oldSonFiber.effectTag = DELETION; // 将老的fiber树中的对应节点标记为删除
         deletions.push(oldSonFiber);
       }
